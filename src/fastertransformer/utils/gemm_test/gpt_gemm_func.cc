@@ -769,6 +769,9 @@ size_t calGptGemmTestBufSizeInByte(int            batch_size,
     // int wordSize = (data_type == FLOAT_DATATYPE ? sizeof(float) : sizeof(half));
     // Because we always use float for some buffer, set the wordSize to float directly.
     int wordSize = sizeof(float);
+    
+    printf(" calGptGemmTestBufSizeInByten sizeof(float) %s . \n", wordSize);
+
 
     size_t              m = batch_size * beam_width * max_input_len;
     std::vector<size_t> buff_size;

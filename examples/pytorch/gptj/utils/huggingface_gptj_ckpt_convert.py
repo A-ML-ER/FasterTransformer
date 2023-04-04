@@ -14,13 +14,19 @@ np.set_printoptions(linewidth=130, suppress=True)
 # in https://huggingface.co/EleutherAI/gpt-j-6B/blob/main/pytorch_model.bin.
 
 def savebin(param, save_path):
+    print(f" enter savebin param : {param} , save_path : {save_path}")
     if isinstance(param, torch.Tensor):
         param = param.cpu().float().numpy()
+        print(f" param from param.cpu().float().numpy() :  {param}")
+    print(f" before np.squeeze ........")
     np.squeeze(param).astype(np.float32).tofile(save_path + ".bin")
 
+
 def param2file(pt_param, layer_id, save_dir, dest_key):
+    print(f" enter param2file pt_param : {pt_param} , layer_id : {layer_id} , save_dir : {save_dir}, dest_key : {dest_key}")
     base_n = save_dir + "/model.layers." + str(layer_id) + "."
     save_path = base_n + dest_key
+    print(f" param2file base_n : {base_n} , save_path : {save_path} ")
     savebin(pt_param, save_path)
 
 def param2distributed(
@@ -32,9 +38,14 @@ def param2distributed(
     split_axis,
 ):
     np_param = pt_param.cpu().float().numpy()
+    print(f" param2distributed  np_param : {np_param} , layer_id : {layer_id} ")
+    print(f" param2distributed  save_dir : {save_dir} , dest_key : {dest_key} ")
+    print(f" param2distributed  n_inference_gpus : {n_inference_gpus} , split_axis : {split_axis} ")
     base_n = save_dir + "/model.layers." + str(layer_id) + "."
     save_path = base_n + dest_key
     split_param = np.split(np_param, n_inference_gpus, axis=split_axis)
+    print(f"   base_n : {base_n} , save_path : {save_path} ")
+    print(f" split_param  :  {split_param} ")
     for i, p in enumerate(split_param):
         savebin(p, save_path + f".{i}")
 
@@ -120,17 +131,31 @@ if __name__ == "__main__":
     print(f"saving to {output_dir}")
 
     config_file = args.ckpt_dir + "/config.json"
+    print(f" load config_file : {config_file}")
     hf_config = PretrainedConfig.from_json_file(config_file).to_dict()
+
+    print(f" load hf_config : {hf_config}")
 
     # NOTE: save parameters to config files (loaded by triton backends)
     config = configparser.ConfigParser()
+    print(f" save parameters to config files (loaded by triton backends): {config}")
+
     config["gptj"] = {}
     try:
         config["gptj"]["model_name"] = "gptj" if hf_config["_name_or_path"] == '' else hf_config["_name_or_path"]
+        gptj_model_name = config["gptj"]["model_name"]
+        print(f" load gptj_model_name : {gptj_model_name}")
         config["gptj"]["head_num"] = str(hf_config["n_head"])
+        gptj_head_num = config["gptj"]["head_num"]
+        print(f" gptj_head_num : {gptj_model_name}")
         n_embd = hf_config["n_embd"]
+        print(f" n_embd : {n_embd}")
         config["gptj"]["size_per_head"] = str(n_embd // hf_config["n_head"])
+        gptj_size_per_head = config["gptj"]["size_per_head"]
+        print(f" gptj size_per_head : {gptj_size_per_head}")
         config["gptj"]["inter_size"] = str(n_embd * 4)
+        gptj_inter_size = config["gptj"]["inter_size"]
+        print(f" gptj gptj_inter_size : {gptj_inter_size}")
         config["gptj"]["num_layer"] = str(hf_config["n_layer"])
         rotary_dim = n_embd // hf_config["n_head"] if hf_config["rotary_dim"] is None else hf_config["rotary_dim"]
         config["gptj"]["rotary_embedding"] = str(hf_config["rotary_dim"])
@@ -139,16 +164,25 @@ if __name__ == "__main__":
         config["gptj"]["end_id"] = str(hf_config["eos_token_id"])
         config["gptj"]["weight_data_type"] = "fp32"
         Path(output_dir).mkdir(exist_ok=True, parents=True)
+        print(f" before write to {output_dir} /config.ini")
         with open(output_dir + "/config.ini", 'w') as configfile:
             config.write(configfile)
+        print(f" after write to {output_dir} /config.ini")
+
     except:
         print(f"Fail to save the config in config.ini.")
 
+    print(f" before for 28 iter save()")
     for i in range(args.n_layers):
         save(checkpoint, output_dir, args.n_inference_gpus, args.n_layers, i)
+    
+    print(f" savebin(checkpoint['transformer.ln_f.weight'] {output_dir} /model.final_layernorm.weight")
     savebin(checkpoint['transformer.ln_f.weight'], output_dir + "/model.final_layernorm.weight")
+    print(f" savebin(checkpoint['transformer.ln_f.bias'] {output_dir} /model.final_layernorm.bias")
     savebin(checkpoint['transformer.ln_f.bias'], output_dir + "/model.final_layernorm.bias")
+    print(f" savebin(checkpoint['lm_head.weight'] {output_dir} /model.lm_head.weight ")
     savebin(checkpoint['lm_head.weight'], output_dir + "/model.lm_head.weight")
+    print(f" savebin(checkpoint['lm_head.bias'] {output_dir} /model.lm_head.bias")
     savebin(checkpoint['lm_head.bias'], output_dir + "/model.lm_head.bias")
 
     print("done")

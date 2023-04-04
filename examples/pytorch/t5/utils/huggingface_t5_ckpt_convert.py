@@ -47,31 +47,46 @@ def get_weight_data_type(data_type):
 
 
 def fuse_decoder_qkv(model, factor, saved_dir, np_weight_data_type):
+    print(f" enter fuse_decoder_qkv model : {model} , factor : {factor}")
+    print(f" saved_dir : {saved_dir} , np_weight_data_type : {np_weight_data_type}")
     model_dict = {}
     for name, param in model.named_parameters():
         if name.find("decoder") != -1 and name.find("SelfAttention") != -1:
             model_dict[name] = param
 
+    p_num_layers = model.decoder.config.num_layers
+    print(f" before for loop , p_num_layers : {p_num_layers} ")
     for i in range(model.decoder.config.num_layers):
         shape = model_dict[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"].T.shape
+        print(f" inside for loop, shape : {shape} ")
         qkv = torch.cat([model_dict[f"decoder.block.{i}.layer.0.SelfAttention.q.weight"].T,
                          model_dict[f"decoder.block.{i}.layer.0.SelfAttention.k.weight"].T,
                          model_dict[f"decoder.block.{i}.layer.0.SelfAttention.v.weight"].T], dim=-1)
 
+        
         qkv = qkv.reshape([shape[0], 3, shape[1]])
         qkv = qkv.cpu().detach().numpy().astype(np_weight_data_type)
 
         split_vals = np.split(qkv, factor, axis=-1)
+        print(f" inside for loop, split_vals : {split_vals} ")
         for j in range(factor):
+            print(f" inside second level loop ")
             saved_path = saved_dir / f"decoder.block.{i}.layer.0.SelfAttention.qkv.weight.{j}.bin"
+            print(f" inside second level loop , saved_path : {saved_path}")
             split_vals[j].tofile(saved_path.as_posix())
 
 
 def split_and_convert_process(key, val, factor, saved_dir):
+    print(f" enter split_and_convert_process , key : {key}")
+    print(f"  split_and_convert_process , val : {val}")
+    print(f"  split_and_convert_process , factor : {factor}")
+    print(f"  split_and_convert_process , saved_dir : {saved_dir}")
+
     if val.ndim == 2:
         val = val.transpose(1, 0)
     saved_key = key
     LOGGER.debug(f"key: {key}, val.shape: {val.shape}")
+    print(f"key: {key}, val.shape: {val.shape}")
 
     if key.find("shared.weight") != -1:
         # shared weights, only need to convert the weights of rank 0
@@ -79,16 +94,19 @@ def split_and_convert_process(key, val, factor, saved_dir):
         val.tofile(saved_path.as_posix())
 
         saved_path = saved_dir / f"{saved_key}_T.bin"
+        print(f" val.T.tofile : {saved_path}")
         val.T.tofile(saved_path.as_posix())
     elif key.find("lm_head.weight") != -1:
         # lm_head weights, only need to convert the weights of rank 0
         val = val.transpose(1, 0)  # For lm_head, we use TN gemm to compute, so we don't need to transpose
         saved_path = saved_dir / f"{saved_key}.bin"
+        print(f" val.tofile : {saved_path}")
         val.tofile(saved_path.as_posix())
 
     elif key.find("layer_norm.weight") != -1:
         # shared weights, only need to convert the weights of rank 0
         saved_path = saved_dir / f"{saved_key}.bin"
+        print(f" val.tofile : {saved_path}")
         val.tofile(saved_path.as_posix())
 
     elif (
@@ -116,6 +134,7 @@ def split_and_convert_process(key, val, factor, saved_dir):
         split_vals = np.split(val, factor, axis=-1)
         for j in range(factor):
             saved_path = saved_dir / f"{saved_key}.{j:d}.bin"
+            print(f" inside for loop factor, split_vals {j} : {saved_path}")
             split_vals[j].tofile(saved_path.as_posix())
     elif (
             key.find("DenseReluDense.wi_0.weight") != -1
@@ -124,16 +143,23 @@ def split_and_convert_process(key, val, factor, saved_dir):
         # For gated activation.
         if key.find("DenseReluDense.wi_0.weight") != -1:
             saved_key = key.replace("wi_0", "wi")
+            print(f"  key.replace(wi_0, wi) , saved_key : {saved_key} ")
         elif key.find("DenseReluDense.wi_1.weight") != -1:
             saved_key = key.replace("wi_1", "wi2")
+            print(f"  DenseReluDense.wi_1.wi2 : saved_key {saved_key} ")
+
         split_vals = np.split(val, factor, axis=-1)
+        print(f" np.split(val, factor, axis=-1) , split_vals : {split_vals} ")
         for j in range(factor):
             saved_path = saved_dir / f"{saved_key}.{j:d}.bin"
+            print(f"  saved_key.j:d.bin  : saved_path {saved_path} ")
             split_vals[j].tofile(saved_path.as_posix())
     elif key.find("relative_attention_bias") != -1:
         split_vals = np.split(val, factor, axis=0)
+        print(f" np.split(val, factor, axis=0) , split_vals : {split_vals} ")
         for j in range(factor):
             saved_path = saved_dir / f"{saved_key}.{j:d}.bin"
+            print(f" inside loop factor  : {saved_path} ")
             split_vals[j].tofile(saved_path.as_posix())
     elif (
             key.find("decoder") != -1 and
@@ -155,15 +181,21 @@ def convert_checkpoint(args):
     saved_dir = Path(args.saved_dir) / f"{args.inference_tensor_para_size:d}-gpu"
     saved_dir.mkdir(parents=True, exist_ok=True)
 
+    print(f" enter convert_checkpoint  saved_dir : {saved_dir}")
     if args.encoder_only:
         t5_model = T5EncoderModel.from_pretrained(args.in_file)
+        print(f" Loaded T5EncoderModel.from_pretrained {args.in_file} ")
     else:
         t5_model = T5ForConditionalGeneration.from_pretrained(args.in_file)
+        print(f" Loaded T5ForConditionalGeneration.from_pretrained : {args.in_file} ")
 
     config = configparser.ConfigParser()
+    print("config : ")
+    print(config)
 
     if t5_model.encoder.config.feed_forward_proj.find("gated") != -1:
         new_configs["structure"]["use_gated_activation"] = "1"
+        print(f" new_configs[structure][use_gated_activation] = 1 ")
 
     config["encoder"] = {}
     for key, val in t5_model.encoder.config.to_dict().items():
@@ -190,6 +222,7 @@ def convert_checkpoint(args):
     i_gpu_num = args.inference_tensor_para_size
 
     pool = multiprocessing.Pool(args.processes)
+    print(f" start multiprocessing ")
     pool.starmap_async(split_and_convert_process,
                        [(name, param.cpu().detach().numpy().astype(np_weight_data_type), i_gpu_num, saved_dir)
                         for name, param in t5_model.state_dict().items()])
@@ -215,13 +248,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     log_format = "%(asctime)s %(name)s [%(levelname)s] %(message)s"
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format=log_format)
+    
     LOGGER.info("\n=============== Argument ===============")
     for key in vars(args):
         LOGGER.info(f"{key}: {vars(args)[key]}")
     LOGGER.info("========================================")
 
     start_time = datetime.now()
+    print(f" !!!  before  convert_checkpoint !!! ")
     convert_checkpoint(args)
+    print(f" !!!  after  convert_checkpoint !!! ")
     stop_time = datetime.now()
     run_time = (stop_time - start_time)
     LOGGER.info("Spend {} (h:m:s) to convert the model".format(run_time))

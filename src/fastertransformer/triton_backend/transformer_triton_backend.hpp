@@ -290,6 +290,7 @@ struct AbstractTransformerModel {
     static std::shared_ptr<AbstractTransformerModel> createGptModel(std::string inifile);
     static std::shared_ptr<AbstractTransformerModel> createGptFP8Model(std::string inifile);
     static std::shared_ptr<AbstractTransformerModel> createGptJModel(std::string inifile);
+    static std::shared_ptr<AbstractTransformerModel> createLlamaModel(std::string inifile);
     static std::shared_ptr<AbstractTransformerModel> createGptNeoXModel(std::string inifile);
     static std::shared_ptr<AbstractTransformerModel> createT5Model(std::string model_dir);
     static std::shared_ptr<AbstractTransformerModel> createT5EncoderModel(std::string model_dir);

@@ -334,6 +334,12 @@ add_library(transformer-shared SHARED
   $<TARGET_OBJECTS:GptJDecoderLayerWeight>
   $<TARGET_OBJECTS:GptJTritonBackend>
   $<TARGET_OBJECTS:GptJWeight>
+  $<TARGET_OBJECTS:Llama>
+  $<TARGET_OBJECTS:LlamaContextDecoder>
+  $<TARGET_OBJECTS:LlamaDecoder>
+  $<TARGET_OBJECTS:LlamaDecoderLayerWeight>
+  $<TARGET_OBJECTS:LlamaTritonBackend>
+  $<TARGET_OBJECTS:LlamaWeight>
   $<TARGET_OBJECTS:GptNeoX>
   $<TARGET_OBJECTS:GptNeoXContextDecoder>
   $<TARGET_OBJECTS:GptNeoXDecoder>
