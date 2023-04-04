@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "src/fastertransformer/models/multi_gpu_llama/ParallelGptWeight.h"
+#include "src/fastertransformer/models/multi_gpu_llama/ParallelLlamaWeight.h"
 
 namespace fastertransformer {
 
 template<typename T>
-ParallelGptWeight<T>::ParallelGptWeight(const int                                  hidden_units,
+ParallelLlamaWeight<T>::ParallelLlamaWeight(const int                                  hidden_units,
                                         const int                                  inter_size,
                                         const int                                  vocab_size,
                                         const int                                  num_layer,
@@ -31,7 +31,7 @@ ParallelGptWeight<T>::ParallelGptWeight(const int                               
                                         const int                                  int8_mode,
                                         PromptLearningType                         prompt_learning_type,
                                         std::map<std::string, std::pair<int, int>> prompt_learning_pair,
-                                        gptVariantParams                           gpt_variant_params):
+                                        llamaVariantParams                           llama_variant_params):
     hidden_units_(hidden_units),
     inter_size_(inter_size),
     vocab_size_(vocab_size),
@@ -44,7 +44,7 @@ ParallelGptWeight<T>::ParallelGptWeight(const int                               
     int8_mode_(int8_mode),
     prompt_learning_type_(prompt_learning_type),
     prompt_learning_pair_(prompt_learning_pair),
-    gpt_variant_params_(gpt_variant_params)
+    llama_variant_params_(llama_variant_params)
 {
     FT_CHECK(num_layer_ % layer_para_size_ == 0);
     // set prompt weight size
@@ -63,12 +63,12 @@ ParallelGptWeight<T>::ParallelGptWeight(const int                               
     decoder_layer_weights.reserve(num_layer_);
     for (int l = 0; l < num_layer_; l++) {
         if (isValidLayerParallelId(l)) {
-            decoder_layer_weights.push_back(new ParallelGptDecoderLayerWeight<T>(
-                hidden_units_, inter_size_, tensor_para_size_, tensor_para_rank_, int8_mode_, gpt_variant_params_));
+            decoder_layer_weights.push_back(new ParallelLlamaDecoderLayerWeight<T>(
+                hidden_units_, inter_size_, tensor_para_size_, tensor_para_rank_, int8_mode_, llama_variant_params_));
         }
         else {
             // Don't malloc and load these layers since we don't use them.
-            decoder_layer_weights.push_back(new ParallelGptDecoderLayerWeight<T>());
+            decoder_layer_weights.push_back(new ParallelLlamaDecoderLayerWeight<T>());
         }
     }
 
@@ -77,7 +77,7 @@ ParallelGptWeight<T>::ParallelGptWeight(const int                               
 }
 
 template<typename T>
-ParallelGptWeight<T>::~ParallelGptWeight()
+ParallelLlamaWeight<T>::~ParallelLlamaWeight()
 {
     if (is_maintain_buffer == true) {
         for (int i = 0; i < weights_ptr.size(); i++) {
@@ -104,7 +104,7 @@ ParallelGptWeight<T>::~ParallelGptWeight()
 }
 
 template<typename T>
-ParallelGptWeight<T>::ParallelGptWeight(const ParallelGptWeight& other):
+ParallelLlamaWeight<T>::ParallelLlamaWeight(const ParallelLlamaWeight& other):
     hidden_units_(other.hidden_units_),
     inter_size_(other.inter_size_),
     vocab_size_(other.vocab_size_),
@@ -119,19 +119,19 @@ ParallelGptWeight<T>::ParallelGptWeight(const ParallelGptWeight& other):
     malloc_load_prompt_weights_(other.malloc_load_prompt_weights_),
     prompt_learning_type_(other.prompt_learning_type_),
     prompt_learning_pair_(other.prompt_learning_pair_),
-    gpt_variant_params_(other.gpt_variant_params_),
+    llama_variant_params_(other.llama_variant_params_),
     shared_embed_(other.shared_embed_)
 {
     mallocWeights();
-    if (gpt_variant_params_.has_positional_encoding) {
+    if (llama_variant_params_.has_positional_encoding) {
         cudaD2Dcpy(weights_ptr[0], other.weights_ptr[0], max_seq_len_ * vocab_size_);
     }
     cudaD2Dcpy(weights_ptr[1], other.weights_ptr[1], vocab_size_ * hidden_units_);
-    if (gpt_variant_params_.has_pre_decoder_layernorm) {
+    if (llama_variant_params_.has_pre_decoder_layernorm) {
         cudaD2Dcpy(weights_ptr[2], other.weights_ptr[2], hidden_units_);
         cudaD2Dcpy(weights_ptr[3], other.weights_ptr[3], hidden_units_);
     }
-    if (gpt_variant_params_.has_post_decoder_layernorm) {
+    if (llama_variant_params_.has_post_decoder_layernorm) {
         cudaD2Dcpy(weights_ptr[4], other.weights_ptr[4], hidden_units_);
         cudaD2Dcpy(weights_ptr[5], other.weights_ptr[5], hidden_units_);
     }
@@ -160,7 +160,7 @@ ParallelGptWeight<T>::ParallelGptWeight(const ParallelGptWeight& other):
 }
 
 template<typename T>
-ParallelGptWeight<T>& ParallelGptWeight<T>::operator=(const ParallelGptWeight& other)
+ParallelLlamaWeight<T>& ParallelLlamaWeight<T>::operator=(const ParallelLlamaWeight& other)
 {
     hidden_units_               = other.hidden_units_;
     inter_size_                 = other.inter_size_;
@@ -176,19 +176,19 @@ ParallelGptWeight<T>& ParallelGptWeight<T>::operator=(const ParallelGptWeight& o
     malloc_load_prompt_weights_ = other.malloc_load_prompt_weights_;
     prompt_learning_type_       = other.prompt_learning_type_;
     prompt_learning_pair_       = other.prompt_learning_pair_;
-    gpt_variant_params_         = other.gpt_variant_params_;
+    llama_variant_params_         = other.llama_variant_params_;
     shared_embed_               = other.shared_embed_;
 
     mallocWeights();
-    if (gpt_variant_params_.has_positional_encoding) {
+    if (llama_variant_params_.has_positional_encoding) {
         cudaD2Dcpy(weights_ptr[0], other.weights_ptr[0], max_seq_len_ * vocab_size_);
     }
     cudaD2Dcpy(weights_ptr[1], other.weights_ptr[1], vocab_size_ * hidden_units_);
-    if (gpt_variant_params_.has_pre_decoder_layernorm) {
+    if (llama_variant_params_.has_pre_decoder_layernorm) {
         cudaD2Dcpy(weights_ptr[2], other.weights_ptr[2], hidden_units_);
         cudaD2Dcpy(weights_ptr[3], other.weights_ptr[3], hidden_units_);
     }
-    if (gpt_variant_params_.has_post_decoder_layernorm) {
+    if (llama_variant_params_.has_post_decoder_layernorm) {
         cudaD2Dcpy(weights_ptr[4], other.weights_ptr[4], hidden_units_);
         cudaD2Dcpy(weights_ptr[5], other.weights_ptr[5], hidden_units_);
     }
@@ -217,16 +217,16 @@ ParallelGptWeight<T>& ParallelGptWeight<T>::operator=(const ParallelGptWeight& o
 }
 
 template<typename T>
-void ParallelGptWeight<T>::setWeightPtr()
+void ParallelLlamaWeight<T>::setWeightPtr()
 {
     prompt_learning_table.resize(prompt_learning_pair_.size());
 
-    position_encoding_table      = gpt_variant_params_.has_positional_encoding ? weights_ptr[0] : nullptr;
+    position_encoding_table      = llama_variant_params_.has_positional_encoding ? weights_ptr[0] : nullptr;
     pre_decoder_embedding_table  = weights_ptr[1];
-    pre_decoder_layernorm.gamma  = gpt_variant_params_.has_pre_decoder_layernorm ? weights_ptr[2] : nullptr;
-    pre_decoder_layernorm.beta   = gpt_variant_params_.has_pre_decoder_layernorm ? weights_ptr[3] : nullptr;
-    post_decoder_layernorm.beta  = gpt_variant_params_.has_post_decoder_layernorm ? weights_ptr[4] : nullptr;
-    post_decoder_layernorm.gamma = gpt_variant_params_.has_post_decoder_layernorm ? weights_ptr[5] : nullptr;
+    pre_decoder_layernorm.gamma  = llama_variant_params_.has_pre_decoder_layernorm ? weights_ptr[2] : nullptr;
+    pre_decoder_layernorm.beta   = llama_variant_params_.has_pre_decoder_layernorm ? weights_ptr[3] : nullptr;
+    post_decoder_layernorm.beta  = llama_variant_params_.has_post_decoder_layernorm ? weights_ptr[4] : nullptr;
+    post_decoder_layernorm.gamma = llama_variant_params_.has_post_decoder_layernorm ? weights_ptr[5] : nullptr;
     if (shared_embed_ && weights_ptr[6] != weights_ptr[1]) {
         deviceFree(weights_ptr[6]);
         weights_ptr[6]                = nullptr;
@@ -251,22 +251,22 @@ void ParallelGptWeight<T>::setWeightPtr()
 }
 
 template<typename T>
-void ParallelGptWeight<T>::mallocWeights()
+void ParallelLlamaWeight<T>::mallocWeights()
 {
     weights_ptr.resize(num_base_weights + prompt_learning_pair_.size());
 
-    if (gpt_variant_params_.has_positional_encoding) {
+    if (llama_variant_params_.has_positional_encoding) {
         deviceMalloc(&weights_ptr[0], max_seq_len_ * vocab_size_);
     }
     // word embedding table.
     deviceMalloc(&weights_ptr[1], vocab_size_ * hidden_units_);
     // pre decoder layernorm
-    if (gpt_variant_params_.has_pre_decoder_layernorm) {
+    if (llama_variant_params_.has_pre_decoder_layernorm) {
         deviceMalloc(&weights_ptr[2], hidden_units_);
         deviceMalloc(&weights_ptr[3], hidden_units_);
     }
     // post decoder layernorm
-    if (gpt_variant_params_.has_post_decoder_layernorm) {
+    if (llama_variant_params_.has_post_decoder_layernorm) {
         deviceMalloc(&weights_ptr[4], hidden_units_);
         deviceMalloc(&weights_ptr[5], hidden_units_);
     }
@@ -290,22 +290,22 @@ void ParallelGptWeight<T>::mallocWeights()
 }
 
 template<typename T>
-void ParallelGptWeight<T>::loadModel(std::string dir_path)
+void ParallelLlamaWeight<T>::loadModel(std::string dir_path)
 {
-    FtCudaDataType model_file_type = getModelFileType(dir_path + "/config.ini", "gpt");
+    FtCudaDataType model_file_type = getModelFileType(dir_path + "/config.ini", "llama");
     FT_CHECK(is_maintain_buffer == true);
-    if (gpt_variant_params_.has_positional_encoding) {
+    if (llama_variant_params_.has_positional_encoding) {
         loadWeightFromBin<T>(
             weights_ptr[0], {max_seq_len_, hidden_units_}, dir_path + "/model.wpe.bin", model_file_type);
     }
     loadWeightFromBin<T>(weights_ptr[1], {vocab_size_ * hidden_units_}, dir_path + "/model.wte.bin", model_file_type);
-    if (gpt_variant_params_.has_pre_decoder_layernorm) {
+    if (llama_variant_params_.has_pre_decoder_layernorm) {
         loadWeightFromBin<T>(
             weights_ptr[2], {hidden_units_}, dir_path + "/model.pre_decoder_layernorm.weight.bin", model_file_type);
         loadWeightFromBin<T>(
             weights_ptr[3], {hidden_units_}, dir_path + "/model.pre_decoder_layernorm.bias.bin", model_file_type);
     }
-    if (gpt_variant_params_.has_post_decoder_layernorm) {
+    if (llama_variant_params_.has_post_decoder_layernorm) {
         loadWeightFromBin<T>(
             weights_ptr[4], {hidden_units_}, dir_path + "/model.final_layernorm.bias.bin", model_file_type);
         loadWeightFromBin<T>(
@@ -353,7 +353,7 @@ void ParallelGptWeight<T>::loadModel(std::string dir_path)
 }
 
 template<typename T>
-bool ParallelGptWeight<T>::isValidLayerParallelId(int l)
+bool ParallelLlamaWeight<T>::isValidLayerParallelId(int l)
 {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f / layer_para_size_));
     return l < num_layer_ && (l >= local_num_layer * layer_para_rank_)
@@ -361,19 +361,19 @@ bool ParallelGptWeight<T>::isValidLayerParallelId(int l)
 }
 
 template<typename T>
-void ParallelGptWeight<T>::resizeLayer(const int num_layer, const int int8_mode)
+void ParallelLlamaWeight<T>::resizeLayer(const int num_layer, const int int8_mode)
 {
     int8_mode_ = int8_mode;
     num_layer_ = num_layer;
     decoder_layer_weights.reserve(num_layer_);
     for (int l = 0; l < num_layer_; l++) {
-        decoder_layer_weights.push_back(new ParallelGptDecoderLayerWeight<T>(int8_mode_));
+        decoder_layer_weights.push_back(new ParallelLlamaDecoderLayerWeight<T>(int8_mode_));
     }
 }
 
 #ifdef SPARSITY_ENABLED
 template<typename T>
-void ParallelGptWeight<T>::compress_weights(cublasMMWrapper& cublas_wrapper)
+void ParallelLlamaWeight<T>::compress_weights(cublasMMWrapper& cublas_wrapper)
 {
     FT_CHECK(decoder_layer_weights.size() == static_cast<size_t>(num_layer_));
     for (int i = 0; i < num_layer_; ++i) {
@@ -384,10 +384,10 @@ void ParallelGptWeight<T>::compress_weights(cublasMMWrapper& cublas_wrapper)
 }
 #endif
 
-template struct ParallelGptWeight<float>;
-template struct ParallelGptWeight<half>;
+template struct ParallelLlamaWeight<float>;
+template struct ParallelLlamaWeight<half>;
 #ifdef ENABLE_BF16
-template struct ParallelGptWeight<__nv_bfloat16>;
+template struct ParallelLlamaWeight<__nv_bfloat16>;
 #endif
 
 }  // namespace fastertransformer
