@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-#include "src/fastertransformer/models/multi_gpu_llama/ParallelLlamaDecoder.h"
+#include "src/fastertransformer/models/multi_gpu_gpt/ParallelGptDecoder.h"
 #include "src/fastertransformer/utils/nvtx_utils.h"
 
 namespace fastertransformer {
 
 template<typename T>
-void ParallelLlamaDecoder<T>::initialize()
+void ParallelGptDecoder<T>::initialize()
 {
     FT_LOG_DEBUG(__PRETTY_FUNCTION__);
     self_attention_layer_ = new TensorParallelDecoderSelfAttentionLayer<T>(max_batch_size_,
@@ -81,7 +81,7 @@ void ParallelLlamaDecoder<T>::initialize()
 }
 
 template<typename T>
-ParallelLlamaDecoder<T>::ParallelLlamaDecoder(size_t                              max_batch_size,
+ParallelGptDecoder<T>::ParallelGptDecoder(size_t                              max_batch_size,
                                           size_t                              head_num,
                                           size_t                              size_per_head,
                                           size_t                              inter_size,
@@ -90,7 +90,7 @@ ParallelLlamaDecoder<T>::ParallelLlamaDecoder(size_t                            
                                           size_t                              moe_k,
                                           std::vector<int64_t>                moe_layer_index,
                                           float                               layernorm_eps,
-                                          llamaVariantParams                    llama_variant_params,
+                                          gptVariantParams                    gpt_variant_params,
                                           NcclParam                           tensor_para,
                                           NcclParam                           pipeline_para,
                                           cudaStream_t                        stream,
@@ -111,10 +111,10 @@ ParallelLlamaDecoder<T>::ParallelLlamaDecoder(size_t                            
     moe_k_(moe_k),
     moe_layer_index_(moe_layer_index),
     layernorm_eps_(layernorm_eps),
-    layernorm_type_(llama_variant_params.layernorm_type),
-    activation_type_(llama_variant_params.activation_type),
-    adapter_inter_size_(llama_variant_params.adapter_inter_size),
-    has_adapters_(llama_variant_params.has_adapters),
+    layernorm_type_(gpt_variant_params.layernorm_type),
+    activation_type_(gpt_variant_params.activation_type),
+    adapter_inter_size_(gpt_variant_params.adapter_inter_size),
+    has_adapters_(gpt_variant_params.has_adapters),
     hidden_units_(head_num_ * size_per_head_),
     tensor_para_(tensor_para),
     pipeline_para_(pipeline_para),
@@ -126,7 +126,7 @@ ParallelLlamaDecoder<T>::ParallelLlamaDecoder(size_t                            
 }
 
 template<typename T>
-ParallelLlamaDecoder<T>::ParallelLlamaDecoder(ParallelLlamaDecoder<T> const& decoder):
+ParallelGptDecoder<T>::ParallelGptDecoder(ParallelGptDecoder<T> const& decoder):
     BaseLayer(decoder.stream_,
               decoder.cublas_wrapper_,
               decoder.allocator_,
@@ -157,13 +157,13 @@ ParallelLlamaDecoder<T>::ParallelLlamaDecoder(ParallelLlamaDecoder<T> const& dec
 }
 
 template<typename T>
-void ParallelLlamaDecoder<T>::allocateBuffer()
+void ParallelGptDecoder<T>::allocateBuffer()
 {
     FT_CHECK(false);
 }
 
 template<typename T>
-void ParallelLlamaDecoder<T>::allocateBuffer(size_t batch_size)
+void ParallelGptDecoder<T>::allocateBuffer(size_t batch_size)
 {
     FT_LOG_DEBUG(__PRETTY_FUNCTION__);
     decoder_layer_output_ = reinterpret_cast<T*>(
@@ -195,7 +195,7 @@ void ParallelLlamaDecoder<T>::allocateBuffer(size_t batch_size)
 }
 
 template<typename T>
-void ParallelLlamaDecoder<T>::freeBuffer()
+void ParallelGptDecoder<T>::freeBuffer()
 {
     if (is_allocate_buffer_) {
         FT_LOG_DEBUG(__PRETTY_FUNCTION__);
@@ -217,7 +217,7 @@ void ParallelLlamaDecoder<T>::freeBuffer()
 }
 
 template<typename T>
-bool ParallelLlamaDecoder<T>::isValidLayerParallelId(uint l)
+bool ParallelGptDecoder<T>::isValidLayerParallelId(uint l)
 {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f / pipeline_para_.world_size_));
     return l < num_layer_ && (l >= local_num_layer * pipeline_para_.rank_)
@@ -225,28 +225,28 @@ bool ParallelLlamaDecoder<T>::isValidLayerParallelId(uint l)
 }
 
 template<typename T>
-bool ParallelLlamaDecoder<T>::isFirstLayerParallelId(uint l)
+bool ParallelGptDecoder<T>::isFirstLayerParallelId(uint l)
 {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f / pipeline_para_.world_size_));
     return l < num_layer_ && (l == local_num_layer * pipeline_para_.rank_);
 }
 
 template<typename T>
-bool ParallelLlamaDecoder<T>::isLastLayerParallelId(uint l)
+bool ParallelGptDecoder<T>::isLastLayerParallelId(uint l)
 {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f / pipeline_para_.world_size_));
     return l < num_layer_ && (l == local_num_layer * (pipeline_para_.rank_ + 1) - 1);
 }
 
 template<typename T>
-int ParallelLlamaDecoder<T>::getFirstLayerParallelId()
+int ParallelGptDecoder<T>::getFirstLayerParallelId()
 {
     int local_num_layer = (int)(ceil(num_layer_ * 1.0f / pipeline_para_.world_size_));
     return local_num_layer * pipeline_para_.rank_;
 }
 
 template<typename T>
-ParallelLlamaDecoder<T>::~ParallelLlamaDecoder()
+ParallelGptDecoder<T>::~ParallelGptDecoder()
 {
     delete self_attention_layer_;
     delete ffn_layer_;
@@ -254,9 +254,9 @@ ParallelLlamaDecoder<T>::~ParallelLlamaDecoder()
 }
 
 template<typename T>
-void ParallelLlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*              output_tensors,
+void ParallelGptDecoder<T>::forward(std::unordered_map<std::string, Tensor>*              output_tensors,
                                     const std::unordered_map<std::string, Tensor>*        input_tensors,
-                                    const std::vector<ParallelLlamaDecoderLayerWeight<T>*>* llama_decoder_layer_weight)
+                                    const std::vector<ParallelGptDecoderLayerWeight<T>*>* gpt_decoder_layer_weight)
 {
     // input tensors:
     //      decoder_input [local_batch_size, hidden_dimension],
@@ -340,7 +340,7 @@ void ParallelLlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*  
         }
 
         PUSH_RANGE("pre-mha layernorm");
-        ParallelLlamaDecoderLayerWeight<T>* layer_weight = llama_decoder_layer_weight->at(l);
+        ParallelGptDecoderLayerWeight<T>* layer_weight = gpt_decoder_layer_weight->at(l);
 
         if (layernorm_type_ == LayerNormType::pre_layernorm) {
             invokeGeneralLayerNorm(decoder_normed_input_,
@@ -645,10 +645,10 @@ void ParallelLlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*  
     }
 }
 
-template class ParallelLlamaDecoder<float>;
-template class ParallelLlamaDecoder<half>;
+template class ParallelGptDecoder<float>;
+template class ParallelGptDecoder<half>;
 #ifdef ENABLE_BF16
-template class ParallelLlamaDecoder<__nv_bfloat16>;
+template class ParallelGptDecoder<__nv_bfloat16>;
 #endif
 
 }  // namespace fastertransformer
