@@ -14,17 +14,12 @@
 
 cmake_minimum_required(VERSION 3.8)
 
-add_library(TransformerTritonBackend SHARED transformer_triton_backend.cpp)
-target_link_libraries(TransformerTritonBackend PRIVATE nccl_utils mpi_utils)
+set(parallel_llama_triton_backend_files
+    ParallelLlamaTritonModel.cc
+    ParallelLlamaTritonModelInstance.cc
+)
 
-add_subdirectory(gptj)
-add_subdirectory(llama)
-add_subdirectory(gptneox)
-add_subdirectory(t5)
-add_subdirectory(t5-encoder)
-add_subdirectory(multi_gpu_gpt)
-add_subdirectory(multi_gpu_llama)
-if (ENABLE_FP8)
-    add_subdirectory(multi_gpu_gpt_fp8)
-endif()
-add_subdirectory(bert)
+add_library(ParallelLlamaTritonBackend STATIC ${parallel_llama_triton_backend_files})
+set_property(TARGET ParallelLlamaTritonBackend PROPERTY POSITION_INDEPENDENT_CODE  ON)
+target_link_libraries(ParallelLlamaTritonBackend PRIVATE TransformerTritonBackend ParallelLlama -lcublasLt)
+target_compile_features(ParallelLlamaTritonBackend PRIVATE cxx_std_14)
