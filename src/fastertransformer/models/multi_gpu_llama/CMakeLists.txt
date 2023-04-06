@@ -24,7 +24,7 @@ set_property(TARGET ParallelLlamaWeight PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelLlamaWeight PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelLlamaWeight PUBLIC ParallelLlamaDecoderLayerWeight cuda_utils logger)
 
-add_library(ParallelLlamaContextDecoder STATIC ParallelLLamaContextDecoder.cc)
+add_library(ParallelLlamaContextDecoder STATIC ParallelLlamaContextDecoder.cc)
 set_property(TARGET ParallelLlamaContextDecoder PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET ParallelLlamaContextDecoder PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(ParallelLlamaContextDecoder PUBLIC -lcudart TensorParallelGeluFfnLayer TensorParallelReluFfnLayer
